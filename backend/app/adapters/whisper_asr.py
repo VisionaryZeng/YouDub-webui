@@ -74,15 +74,26 @@ def _convert_words(words: list) -> list:
 
 
 def _convert_segments(segments: list) -> list:
-    return [
-        {
-            "text": seg.get("text", "").strip(),
-            "start_time": _to_ms(seg.get("start", 0.0)),
-            "end_time": _to_ms(seg.get("end", 0.0)),
-            "words": _convert_words(seg.get("words", [])),
-        }
-        for seg in segments
-    ]
+    line = {}
+    full_line = []
+    for seg in segments:
+        for word in seg.get("words", []):
+            line["text"] += word.get("word", "")
+            line["words"].extend(word)
+            if "," in line["text"] or "." in line["text"]:
+                line["text"] = line["text"].strip()
+                line["words"] = _convert_words(line.get("words", [])),
+                line["start_time"] = _to_ms(line["words"][0].get(["start_time"], 0.0))
+                line["end_time"] = _to_ms(line["words"][-1].get(["end_time"], 0.0))
+                full_line.append(line)
+                line = {
+                    "text": "",
+                    "start_time": _to_ms(0.0),
+                    "end_time": _to_ms(0.0),
+                    "words": [],
+                }
+
+    return full_line
 
 
 def recognize_speech(vocals_file: Path, session: Path, language: str) -> Path:
