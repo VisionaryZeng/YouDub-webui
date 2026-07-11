@@ -1,46 +1,66 @@
 from __future__ import annotations
 
+import itertools
 import json
 import logging
-import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+import instructor
 from openai import OpenAI
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from ..sources import SourceConfig
-from ._translate_prompts import PREPROCESS_PROMPT, TRANSLATE_RULES
+from ._translate_prompts import PROMPT_DICT
 from .openai_client import normalize_openai_base_url
 
 log = logging.getLogger(__name__)
 
 API_SETTING_KEYS = ("base_url", "api_key", "model")
-PREPROCESS_RETRY = 2
-TRANSLATE_RETRY = 2
+CHUNK_SIZE = 10
 DESCRIPTION_LIMIT = 500
 DEFAULT_CONCURRENCY = 50
 
 
-class HotwordItem(BaseModel):
-    src: str
-    dst: str
+class HotWordItem(BaseModel):
+    src: str = Field(description="原文术语")
+    dst: str = Field(description="目标语言推荐译法；如 Transformer/GPU 一类应保持原样，则 dst 与 src 相同")
 
 
 class CorrectionItem(BaseModel):
-    wrong: str
-    correct: str
+    wrong: str = Field(description="转录中明显错认的写法")
+    correct: str = Field(description="正确写法")
 
 
 class PreprocessResponse(BaseModel):
-    summary: str = ""
-    hotwords: list[HotwordItem] = Field(default_factory=list)
-    corrections: list[CorrectionItem] = Field(default_factory=list)
+    summary: str = Field(default="", description="用目标译文语言写的视频摘要，长度限制 3-5 句")
+    hotwords: list[HotWordItem] = Field(default_factory=list, description="热词识别列表")
+    corrections: list[CorrectionItem] = Field(default_factory=list, description="ASR 纠错要点列表")
 
+class TranslationResBase(BaseModel):
+    subtitle_list: list[str] = Field(default_factory=list, description="按顺序翻译好的句子列表")
 
-class TranslationItem(BaseModel):
-    dst: str
+def get_translation_type(target_length: int) -> type[TranslationResBase]:
+    class TranslationRes(TranslationResBase):
+        # 第一个参数必须是 cls，代表 TranslationRes 这个类
+        @field_validator('subtitle_list')
+        def check_length(cls, v):
+            if len(v) != target_length:
+                # 这个报错信息会被 instructor 自动抓取，并塞回给 LLM 让他重试
+                raise ValueError(f"列表长度必须是 {target_length}，但你返回了 {len(v)}")
+            return v
+
+        # 校验 2：检查是否包含空字符串
+        @field_validator('subtitle_list')
+        def check_no_empty_strings(cls, v):
+            # 遍历列表，如果发现去除空格后是空的，就报错
+            if any(not item.strip() for item in v):
+                raise ValueError("返回的列表中包含了空字符串，这是不允许的")
+            return v
+
+    # 返回这个刚刚“捏”好的类（注意是返回类本身，不是类的实例）
+    return TranslationRes
 
 
 def list_models(*, base_url: str, api_key: str) -> list[str]:
@@ -61,47 +81,24 @@ def list_models(*, base_url: str, api_key: str) -> list[str]:
 def _client(base_url: str, api_key: str) -> OpenAI:
     if not api_key:
         raise ValueError("OpenAI API key is not configured.")
-    return OpenAI(api_key=api_key, base_url=normalize_openai_base_url(base_url))
+
+    client = OpenAI(api_key=api_key, base_url=normalize_openai_base_url(base_url),max_retries = 2)
+    return instructor.patch(client)
 
 
-_JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 
-
-def _extract_json(raw: str) -> dict[str, Any]:
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    match = _JSON_BLOCK_RE.search(raw)
-    if not match:
-        raise json.JSONDecodeError(f"no JSON object found; raw[:300]={raw[:300]!r}", raw, 0)
-    try:
-        return json.loads(match.group(0))
-    except json.JSONDecodeError as exc:
-        raise json.JSONDecodeError(
-            f"{exc.msg}; len={len(raw)}; raw[:300]={raw[:300]!r}; raw[-200:]={raw[-200:]!r}",
-            raw,
-            exc.pos,
-        ) from None
-
-
-def _call_json(client: OpenAI, model: str, system: str, user: str) -> dict[str, Any]:
-    response = client.chat.completions.create(
+def _call_json[T: BaseModel](client: OpenAI, model: str, system: str, user: str, schema: type[T]) -> T:
+    response = client.chat.completions.parse(
         model=model,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
+        response_format=schema,
         temperature=0.2,
     )
-    raw = response.choices[0].message.content or "{}"
-    return _extract_json(raw)
+    return response.choices[0].message.parsed
 
-
-def _format_terms(items: list, fmt: str, empty: str) -> str:
-    if not items:
-        return empty
-    return "\n".join(fmt.format(**item.model_dump()) for item in items)
 
 
 def _meta_view(meta: dict[str, Any]) -> dict[str, str]:
@@ -124,61 +121,50 @@ def preprocess(
     api_key: str,
     model: str,
 ) -> PreprocessResponse:
-    user = PREPROCESS_PROMPT.format(
-        src_language_name=source.asr_language_name,
+
+    system = PROMPT_DICT[source.target_language]["system_preprocess"].format(
+        src_language_name=source.asr_language,
         dst_language_name=source.target_language_name,
-        full_text=full_text,
         **_meta_view(meta),
     )
+    user = PROMPT_DICT[source.target_language]["user_preprocess"].format(full_text=full_text)
     client = _client(base_url, api_key)
-    last_error: Exception | None = None
-    for attempt in range(PREPROCESS_RETRY + 1):
-        try:
-            data = _call_json(client, model, "You output strict JSON only.", user)
-            return PreprocessResponse.model_validate(data)
-        except (json.JSONDecodeError, ValidationError) as exc:
-            last_error = exc
-            log.warning("preprocess attempt %d failed: %s", attempt + 1, exc)
-    log.error("preprocess gave up, returning empty: %s", last_error)
+    try:
+        data = _call_json(client, model, system, user, PreprocessResponse)
+        return data
+    except (json.JSONDecodeError, ValidationError) as exc:
+        log.error("preprocess failed: %s", exc)
     return PreprocessResponse()
 
 
-def _translate_system(source: SourceConfig, meta: dict[str, Any], pre: PreprocessResponse) -> str:
-    rules = TRANSLATE_RULES[source.target_language]
-    return rules.format(
-        summary=pre.summary or "(none)",
-        hotwords=_format_terms(pre.hotwords, "{src} -> {dst}", "(none)"),
-        corrections=_format_terms(pre.corrections, "{wrong} -> {correct}", "(none)"),
-        **_meta_view(meta),
-    )
-
-
-def _post_process(text: str, target_language: str) -> str:
-    cleaned = text.strip()
-    if target_language == "zh":
-        cleaned = cleaned.replace("——", "，")
-    return cleaned
+def _post_process(lines: list[str], target_language: str) -> list[str]:
+    return [
+        line.strip().replace("——", "，") if target_language == "zh" else line.strip()
+        for line in lines
+    ]
 
 
 def translate_sentence(
-    text: str,
-    target_language: str,
+    lines: list[str],
+    source: SourceConfig,
     client: OpenAI,
     model: str,
     system: str,
-) -> str:
-    last_error: Exception | None = None
-    for attempt in range(TRANSLATE_RETRY):
-        try:
-            data = _call_json(client, model, system, text)
-            item = TranslationItem.model_validate(data)
-            if not item.dst.strip():
-                raise ValueError("empty dst")
-            return _post_process(item.dst, target_language)
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            last_error = exc
-            log.warning("translate attempt %d failed for %r: %s", attempt + 1, text[:60], exc)
-    raise RuntimeError(f"translate_sentence failed after {TRANSLATE_RETRY} attempts: {last_error}")
+) -> list[str]:
+    # 1. 拼接成完整上下文
+    context_sentence = " ".join(lines)
+    # 2. 将数组转为 JSON 格式字符串，展示原本的“形状”
+    chunks_json = json.dumps(lines, ensure_ascii=False, indent=2)
+
+    user = PROMPT_DICT[source.target_language]["user_translate"].format(context_sentence=context_sentence, chunks_json = chunks_json)
+    translation_type = get_translation_type(len(lines))
+    try:
+        data = _call_json(client, model, system, user, translation_type)
+        return _post_process(data.subtitle_list, source.target_language)
+    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+        last_error = exc
+        log.error("translate attempt failed for %r: %s", lines[:60], exc)
+    raise RuntimeError(f"translate_sentence failed : {last_error}")
 
 
 def translate_batch(
@@ -194,16 +180,30 @@ def translate_batch(
 ) -> list[str]:
     if not texts:
         return []
-    system = _translate_system(source, meta, pre)
+
+    system = PROMPT_DICT[source.target_language]["system_translate"].format(
+        src_language_name=source.asr_language,
+        dst_language_name=source.target_language_name,
+        summary=pre.summary,
+        hotwords=pre.hotwords,
+        corrections=pre.corrections,
+        **_meta_view(meta),
+    )
     client = _client(base_url, api_key)
     log.info(
         "translate_batch: %d sentences, concurrency=%d", len(texts), concurrency,
     )
+
+    chunks = [texts[i:i + CHUNK_SIZE] for i in range(0, len(texts), CHUNK_SIZE)]
+
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
-        return list(pool.map(
-            lambda t: translate_sentence(t, source.target_language, client, model, system),
-            texts,
-        ))
+        # 1. 拿到包含子列表的迭代器
+        chunked_results = pool.map(
+            lambda chunk: translate_sentence(chunk, source, client, model, system),
+            chunks,
+        )
+        # 2. 一键拍平并转换为标准的一维 list
+        return list(itertools.chain.from_iterable(chunked_results))
 
 
 def _read_meta(session: Path) -> dict[str, Any]:
