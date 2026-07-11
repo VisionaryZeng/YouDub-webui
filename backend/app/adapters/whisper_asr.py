@@ -74,31 +74,42 @@ def _convert_words(words: list) -> list:
 
 
 def _convert_segments(segments: list) -> list:
-    line = {
+    pre_line = {
         "text": "",
         "start_time": 0,
         "end_time": 0,
         "words": [],
     }
-    full_line = []
+    full_line = [pre_line]
+    cur_line = []
     for seg in segments:
         for word in seg.get("words", []):
-            line["text"] += word.get("word", "")
-            line["words"].append(word)
-            if "," in line["text"] or "." in line["text"]:
-                line["text"] = line["text"].strip()
-                line["words"] = _convert_words(line["words"])
-                line["start_time"] = line["words"][0].get("start_time", 0.0)
-                line["end_time"] = line["words"][-1].get("end_time", 0.0)
-                full_line.append(line)
-                line = {
-                    "text": "",
-                    "start_time": 0,
-                    "end_time": 0,
-                    "words": [],
-                }
+            cur_line.append(word)
+            # line["words"].append(word)
+            if word.get("word", "").rstrip().endswith(",","."):
+                # 满足超出 16 个字符时作为一行字幕，类似坐电梯，没超重就进电梯，超重了就等下一次电梯
+                if len(pre_line["words"]) + len(cur_line) > 16:
+                    concat_line(pre_line)
+                    pre_line = {
+                        "text": "",
+                        "start_time": 0,
+                        "end_time": 0,
+                        "words": cur_line,
+                    }
+                    full_line.append(pre_line)
+                else:
+                    pre_line["words"].extend(cur_line)
+                cur_line = []
 
+    concat_line(pre_line)
     return full_line
+
+
+def concat_line(pre_line: dict):
+    pre_line["text"] = "".join(word.get("word", "") for word in pre_line["words"]).strip()
+    pre_line["words"] = _convert_words(pre_line["words"])
+    pre_line["start_time"] = pre_line["words"][0].get("start_time", 0.0)
+    pre_line["end_time"] = pre_line["words"][-1].get("end_time", 0.0)
 
 
 def recognize_speech(vocals_file: Path, session: Path, language: str) -> Path:
