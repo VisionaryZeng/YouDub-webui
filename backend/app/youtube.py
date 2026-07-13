@@ -9,6 +9,7 @@ BILIBILI_BV_RE = re.compile(r"BV[A-Za-z0-9]{10}")
 BILIBILI_HOSTS = {"bilibili.com", "www.bilibili.com", "m.bilibili.com"}
 LOCAL_UPLOAD_SCHEME = "local"
 LOCAL_UPLOAD_HOST = "upload"
+LOCAL_PATH_HOST = "path"
 LOCAL_UPLOAD_DIRECTIONS = {"en-zh", "zh-en"}
 LOCAL_UPLOAD_TASK_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -92,3 +93,31 @@ def is_local_en_to_zh_url(url: str) -> bool:
 
 def is_local_zh_to_en_url(url: str) -> bool:
     return is_local_upload_url(url) and local_upload_direction(url) == "zh-en"
+
+
+def is_local_path_url(url: str) -> bool:
+    """Check if URL is a local file path reference: local://path?file=/path/to/video.mp4&direction=en-zh"""
+    parsed = urlparse(url.strip())
+    return parsed.scheme == LOCAL_UPLOAD_SCHEME and parsed.netloc == LOCAL_PATH_HOST
+
+
+def local_path_info(url: str) -> dict:
+    """Extract file path, direction, and subtitle path from local://path URL."""
+    if not is_local_path_url(url):
+        return {}
+    query = parse_qs(urlparse(url.strip()).query)
+    return {
+        "file": (query.get("file") or [""])[0].strip(),
+        "direction": (query.get("direction") or [""])[0].strip(),
+        "subtitle": (query.get("subtitle") or [""])[0].strip() or None,
+    }
+
+
+def is_local_path_en_to_zh_url(url: str) -> bool:
+    info = local_path_info(url)
+    return bool(info.get("file")) and info.get("direction") == "en-zh"
+
+
+def is_local_path_zh_to_en_url(url: str) -> bool:
+    info = local_path_info(url)
+    return bool(info.get("file")) and info.get("direction") == "zh-en"

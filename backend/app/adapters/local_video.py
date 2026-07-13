@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 from ..config import ffmpeg_binary
 from ..sanitize import sanitize_text
 from ..sources import SourceConfig
-from ..youtube import local_upload_task_id
+from ..youtube import is_local_path_url, local_path_info, local_upload_task_id
 
 
 def upload_dir(workfolder: Path, task_id: str) -> Path:
@@ -89,6 +89,10 @@ def _transcode_to_mp4(source_file: Path, video_file: Path) -> None:
 def import_local_video(url: str, workfolder: Path, source: SourceConfig) -> tuple[Path, dict]:
     from .local_subtitles import uploaded_subtitle_file
 
+    # Handle local file path URLs
+    if is_local_path_url(url):
+        return import_local_path(url, workfolder, source)
+
     task_id = local_upload_task_id(url)
     if not task_id:
         raise ValueError("Invalid local upload URL.")
@@ -124,3 +128,57 @@ def import_local_video(url: str, workfolder: Path, source: SourceConfig) -> tupl
     if not video_file.exists() or video_file.stat().st_size == 0:
         raise RuntimeError("ffmpeg finished without producing media/video_source.mp4")
     return session, info
+
+
+def import_local_path(url: str, workfolder: Path, source: SourceConfig) -> tuple[Path, dict]:
+    """Import a local file directly by path without uploading."""
+    import uuid
+
+    info = local_path_info(url)
+    file_path = info.get("file")
+    if not file_path:
+        raise ValueError("Missing file path in local://path URL")
+
+    source_file = Path(file_path)
+    if not source_file.exists():
+        raise FileNotFoundError(f"Video file not found: {file_path}")
+    if not source_file.is_file():
+        raise ValueError(f"Path is not a file: {file_path}")
+
+    subtitle_path = info.get("subtitle")
+    subtitle_file = None
+    if subtitle_path:
+        subtitle_file = Path(subtitle_path)
+        if not subtitle_file.exists():
+            raise FileNotFoundError(f"Subtitle file not found: {subtitle_path}")
+
+    task_id = str(uuid.uuid4())
+    title = source_file.stem
+    session = workfolder / "local-path" / f"{sanitize_text(title) or 'video'}__{task_id}"
+    media_dir = session / "media"
+    metadata_dir = session / "metadata"
+    media_dir.mkdir(parents=True, exist_ok=True)
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+
+    video_file = media_dir / "video_source.mp4"
+    meta = {
+        "id": task_id,
+        "title": title,
+        "source": "local-path",
+        "webpage_url": url,
+        "original_path": str(source_file.absolute()),
+        "asr_language": source.asr_language,
+        "target_language": source.target_language,
+    }
+    if subtitle_path and subtitle_file:
+        meta["subtitle_path"] = str(subtitle_file.absolute())
+    metadata_file = metadata_dir / "local_info.json"
+    metadata_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if video_file.exists() and video_file.stat().st_size > 0:
+        return session, meta
+
+    _transcode_to_mp4(source_file, video_file)
+    if not video_file.exists() or video_file.stat().st_size == 0:
+        raise RuntimeError("ffmpeg finished without producing media/video_source.mp4")
+    return session, meta

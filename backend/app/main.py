@@ -112,6 +112,9 @@ def normalize_translate_concurrency(value: str) -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+
+
+    
     ensure_runtime_dirs()
     database.init_db()
     database.backfill_titles_from_metadata()
@@ -291,6 +294,54 @@ def upload_local_video(
         execution_mode=normalize_execution_mode(execution_mode),
     )
     database.update_task(task_id, title=Path(original_name).stem)
+    worker.enqueue(task_id)
+    return database.get_task(task_id)
+
+
+@app.post("/api/tasks/local-path", status_code=201)
+def create_local_path_task(
+    file_path: str = Form(...),
+    direction: str = Form("en-zh"),
+    subtitle_path: str | None = Form(None),
+    execution_mode: str = Form("auto"),
+) -> dict:
+    """Create a task from a local file path without uploading."""
+    if direction not in LOCAL_UPLOAD_DIRECTIONS:
+        raise HTTPException(status_code=422, detail="Unsupported direction. Use 'en-zh' or 'zh-en'.")
+
+    _ensure_runtime_ready()
+
+    # Validate file path
+    video_file = Path(file_path).expanduser().resolve()
+    if not video_file.exists():
+        raise HTTPException(status_code=404, detail=f"Video file not found: {file_path}")
+    if not video_file.is_file():
+        raise HTTPException(status_code=400, detail=f"Path is not a file: {file_path}")
+
+    # Validate subtitle if provided
+    sub_file = None
+    if subtitle_path:
+        sub_file = Path(subtitle_path).expanduser().resolve()
+        if not sub_file.exists():
+            raise HTTPException(status_code=404, detail=f"Subtitle file not found: {subtitle_path}")
+        if sub_file.suffix.lower() != ".srt":
+            raise HTTPException(status_code=422, detail="Only .srt subtitle files are supported.")
+
+    # Build URL with encoded paths
+    from urllib.parse import urlencode
+
+    params = {"file": str(video_file), "direction": direction}
+    if sub_file:
+        params["subtitle"] = str(sub_file)
+    url = f"local://path?{urlencode(params)}"
+
+    task_id = str(uuid.uuid4())
+    database.create_task(
+        url,
+        task_id=task_id,
+        execution_mode=normalize_execution_mode(execution_mode),
+    )
+    database.update_task(task_id, title=video_file.stem)
     worker.enqueue(task_id)
     return database.get_task(task_id)
 

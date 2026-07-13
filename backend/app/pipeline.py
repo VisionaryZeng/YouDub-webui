@@ -13,7 +13,7 @@ from .devices import device_plan_summary
 from .runtime_checks import validate_runtime_device
 from .sources import detect_source
 from .stages import STAGES
-from .youtube import is_local_upload_url
+from .youtube import is_local_path_url, is_local_upload_url
 
 
 @dataclass
@@ -262,7 +262,7 @@ class PipelineRunner:
 
     def _download(self, task: dict) -> None:
         source = detect_source(task["url"])
-        if is_local_upload_url(task["url"]):
+        if is_local_upload_url(task["url"]) or is_local_path_url(task["url"]):
             from .adapters.local_video import import_local_video
 
             session, info = import_local_video(task["url"], WORKFOLDER, source)

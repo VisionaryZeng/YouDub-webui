@@ -5,7 +5,14 @@ from pathlib import Path
 from typing import Callable
 
 from .config import COOKIE_DIR
-from .youtube import is_bilibili_url, is_local_en_to_zh_url, is_local_zh_to_en_url, is_youtube_url
+from .youtube import (
+    is_bilibili_url,
+    is_local_en_to_zh_url,
+    is_local_path_en_to_zh_url,
+    is_local_path_zh_to_en_url,
+    is_local_zh_to_en_url,
+    is_youtube_url,
+)
 
 
 LANG_NAMES = {"en": "English", "zh": "Simplified Chinese"}
@@ -55,6 +62,22 @@ SOURCES: list[SourceConfig] = [
     SourceConfig(
         name="local",
         matches=is_local_zh_to_en_url,
+        use_proxy=False,
+        cookie_filename=None,
+        asr_language="zh",
+        target_language="en",
+    ),
+    SourceConfig(
+        name="local-path",
+        matches=is_local_path_en_to_zh_url,
+        use_proxy=False,
+        cookie_filename=None,
+        asr_language="en",
+        target_language="zh",
+    ),
+    SourceConfig(
+        name="local-path",
+        matches=is_local_path_zh_to_en_url,
         use_proxy=False,
         cookie_filename=None,
         asr_language="zh",
