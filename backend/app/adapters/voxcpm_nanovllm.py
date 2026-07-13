@@ -18,7 +18,7 @@ class VoxCPMDubbingEngine:
     负责底层模型的生命周期管理、并发推理以及 CPU 密集型任务的线程池调度。
     """
 
-    def __init__(self, model_path: Path,  min_reference_ms: int, cfg_value: float, max_seqs=12, gpu_devices=[0]):
+    def __init__(self, model_path: str,  min_reference_ms: int, cfg_value: float, max_seqs=12, gpu_devices=[0]):
         self.model_path = model_path,
         self._is_ready = False
         self.encoder_sr = None
