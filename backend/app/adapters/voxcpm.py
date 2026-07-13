@@ -149,7 +149,7 @@ def generate_tts(
 
 def async_generate_tts(cfg_value: float, fallback_references: dict[str, Path], items, min_reference_ms: int, output_dir: Path, vocals_dir: Path):
     dubbing_service = SyncDubbingBridge(
-        model_path=str(_model_path()),
+        model_path="/content/YouDub-webui/data/modelscope/OpenBMB__VoxCPM2",
         min_reference_ms=min_reference_ms,
         cfg_value=cfg_value,
         max_seqs=MAX_CONCURRENCY
