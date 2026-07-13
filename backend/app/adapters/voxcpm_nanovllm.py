@@ -31,8 +31,7 @@ class VoxCPMDubbingEngine:
             model=self.model_path,
             max_num_seqs=max_seqs,
             devices=gpu_devices,
-            gpu_memory_utilization=0.70,
-            enable_prefix_caching=False
+            gpu_memory_utilization=0.70
         )
 
     async def startup(self):
@@ -148,7 +147,10 @@ class VoxCPMDubbingEngine:
 
         # 2. 第一优先级：尝试提取当前切片专属特征
         ref_wav_bytes, status = await asyncio.to_thread(
-            self._sync_validate_and_read, original_voice_path, self.encoder_sr
+            self._sync_validate_and_read,
+            original_voice_path,
+            self.encoder_sr,
+            self.min_reference_ms
         )
 
         if ref_wav_bytes is not None:
