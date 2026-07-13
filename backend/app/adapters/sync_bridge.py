@@ -25,6 +25,7 @@ class SyncDubbingBridge:
 
         self.engine = None
         self.engine_config = engine_config
+        self._init_error = None  # 👈 新增：用来记录初始化时的真实错误
         self.loop = asyncio.new_event_loop()
         self._startup_event = threading.Event()  # 启动屏障
 
@@ -45,6 +46,10 @@ class SyncDubbingBridge:
         self._startup_event.wait()
         print("✅ [桥接器] 异步引擎底层就绪，同步接口已开放！")
 
+        # 👈 核心改进：如果发现初始化有错，启动时直接报错，不放行！
+        if self._init_error:
+            raise RuntimeError(f"❌ [桥接器崩溃] 底层引擎启动失败，原因为: {self._init_error}")
+
         self._initialized = True
 
     def _run_event_loop(self):
@@ -62,7 +67,8 @@ class SyncDubbingBridge:
             self.engine = VoxCPMDubbingEngine(**self.engine_config)
             await self.engine.startup()
         except Exception as e:
-            print(f"❌ [桥接器] 引擎初始化惨烈失败: {e}")
+            self._init_error = e  # 👈 把错误存起来
+            print(f"❌ [桥接器内部严重错误]: {e}")
         finally:
             # 无论成功失败，都必须释放屏障，否则主线程会死锁
             self._startup_event.set()
