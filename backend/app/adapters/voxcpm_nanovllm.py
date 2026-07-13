@@ -19,7 +19,7 @@ class VoxCPMDubbingEngine:
     """
 
     def __init__(self, model_path: str,  min_reference_ms: int, cfg_value: float, max_seqs=12, gpu_devices=[0]):
-        self.model_path = model_path,
+        self.model_path = model_path
         self._is_ready = False
         self.encoder_sr = None
         self.min_reference_ms = min_reference_ms
