@@ -14,7 +14,7 @@ from ..config import MODEL_CACHE_DIR
 from ..devices import has_gpu
 
 _MODEL = None
-MAX_CONCURRENCY = 12
+MAX_CONCURRENCY = 4
 GLOBA_FALLBACKL_KEY = "global_fallback_voice"
 _PROMPT_CACHE_GENERATION_DEFAULTS = {
     "min_len": 2,

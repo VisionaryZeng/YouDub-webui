@@ -31,7 +31,8 @@ class VoxCPMDubbingEngine:
             model=self.model_path,
             max_num_seqs=max_seqs,
             devices=gpu_devices,
-            gpu_memory_utilization=0.70
+            gpu_memory_utilization=0.70,
+            enforce_eager=True
         )
 
     async def startup(self):
