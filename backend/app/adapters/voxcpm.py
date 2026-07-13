@@ -9,6 +9,7 @@ from typing import Callable
 import soundfile as sf
 from pydub import AudioSegment
 
+from .sync_bridge import SyncDubbingBridge
 from ..config import MODEL_CACHE_DIR
 from ..devices import has_gpu
 
@@ -147,8 +148,6 @@ def generate_tts(
 
 
 def async_generate_tts(cfg_value: float, fallback_references: dict[str, Path], items, min_reference_ms: int, output_dir: Path, vocals_dir: Path):
-    from sync_bridge import SyncDubbingBridge
-
     dubbing_service = SyncDubbingBridge(
         model_path=str(_model_path()),
         max_seqs=MAX_CONCURRENCY,

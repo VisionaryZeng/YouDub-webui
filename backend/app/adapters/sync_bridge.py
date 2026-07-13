@@ -1,7 +1,7 @@
 import asyncio
 import threading
 import concurrent.futures
-from voxcpm_nanovllm import VoxCPMDubbingEngine  # 引入我们封装好的异步引擎
+from .voxcpm_nanovllm import VoxCPMDubbingEngine  # 引入我们封装好的异步引擎
 
 class SyncDubbingBridge:
     """
