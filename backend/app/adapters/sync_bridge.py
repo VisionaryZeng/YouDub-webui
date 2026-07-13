@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import traceback
 import concurrent.futures
 from .voxcpm_nanovllm import VoxCPMDubbingEngine  # 引入我们封装好的异步引擎
 
@@ -69,6 +70,8 @@ class SyncDubbingBridge:
         except Exception as e:
             self._init_error = e  # 👈 把错误存起来
             print(f"❌ [桥接器内部严重错误]: {e}")
+            print("👇👇👇 详细的崩溃调用栈如下 👇👇👇")
+            traceback.print_exc()  # 👈 核心修改：一键打印完整栈信息
         finally:
             # 无论成功失败，都必须释放屏障，否则主线程会死锁
             self._startup_event.set()
