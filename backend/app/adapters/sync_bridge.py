@@ -59,7 +59,12 @@ class SyncDubbingBridge:
     async def _async_initialize(self):
         """在后台执行的异步初始化"""
         try:
-            self.engine = VoxCPMDubbingEngine(**self.engine_config)
+            self.engine = VoxCPMDubbingEngine(
+                model_path=self.engine_config["model_path"],
+                min_reference_ms=self.engine_config["min_reference_ms"],
+                cfg_value=self.engine_config["cfg_value"],
+                max_seqs=self.engine_config["max_seqs"],
+            )
             await self.engine.startup()
         except Exception as e:
             print(f"❌ [桥接器] 引擎初始化惨烈失败: {e}")
