@@ -195,3 +195,12 @@ def device_plan_summary() -> str:
             text += f" ({item.reason})"
         parts.append(text)
     return ", ".join(parts)
+
+
+def has_gpu() -> bool:
+    """判断当前环境是否有可用的 GPU"""
+    try:
+        torch = _load_torch()
+        return torch.cuda.is_available() or _mps_is_available(torch)
+    except ImportError:
+        return False
