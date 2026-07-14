@@ -75,9 +75,10 @@ def _get_stream_codecs(source_file: Path) -> tuple[str | None, str | None]:
     data = json.loads(result.stdout)
     video_codec = audio_codec = None
     for stream in data.get("streams", []):
-        if stream.get("codec_type") == "video":
+        # 只取第一个视频流和第一个音频流
+        if stream.get("codec_type") == "video" and video_codec is None:
             video_codec = stream.get("codec_name")
-        elif stream.get("codec_type") == "audio":
+        elif stream.get("codec_type") == "audio" and audio_codec is None:
             audio_codec = stream.get("codec_name")
     return video_codec, audio_codec
 
@@ -85,7 +86,7 @@ def _get_stream_codecs(source_file: Path) -> tuple[str | None, str | None]:
 def _transcode_to_mp4(source_file: Path, video_file: Path) -> None:
     """智能转码：h264+aac 直接复制，否则重新编码"""
     video_codec, audio_codec = _get_stream_codecs(source_file)
-
+    print(f"视频编码： {video_codec} {audio_codec}")
     # 如果已经是 h264+aac，直接复制（秒级完成）
     if video_codec == "h264" and audio_codec == "aac":
         subprocess.run(
