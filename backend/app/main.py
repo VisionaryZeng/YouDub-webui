@@ -34,6 +34,7 @@ MAX_LOCAL_SUBTITLE_BYTES = int(os.getenv("LOCAL_SUBTITLE_MAX_BYTES", str(20 * 10
 
 TaskListStatus = Literal["all", "queued", "running", "paused", "succeeded", "failed"]
 TaskListExecutionMode = Literal["all", "auto", "manual"]
+ExecutionMode = Literal["auto", "manual"]
 TaskListSort = Literal[
     "created_desc",
     "created_asc",
@@ -410,6 +411,18 @@ def delete_task(task_id: str) -> Response:
     if is_local_upload_url(task["url"]):
         remove_upload(WORKFOLDER, task["id"])
     return Response(status_code=204)
+
+
+@app.patch("/api/tasks/{task_id}/execution-mode")
+def update_task_execution_mode(task_id: str, execution_mode: ExecutionMode = Query(...)) -> dict:
+    """Update the execution mode of a task."""
+    task = database.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found.")
+
+    normalized = normalize_execution_mode(execution_mode)
+    database.update_task(task_id, execution_mode=normalized)
+    return database.get_task(task_id)
 
 
 @app.post("/api/tasks/{task_id}/rerun")
