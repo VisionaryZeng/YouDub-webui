@@ -311,4 +311,23 @@ def translate_asr(
         json.dumps({"translation": translation}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+    srt_file = session / "metadata" / f"subtitles.bilingual.srt"
+    lines: list[str] = []
+
+    for idx, item in enumerate(translation, start=1):
+        lines.extend([str(idx), f"{_srt_time(item["start_time"])} --> {_srt_time(item["end_time"])}", item["src"], item["dst"], ""])
+
+    srt_file.write_text("\n".join(lines), encoding="utf-8")
+
     return output_file
+
+
+def _srt_time(ms: int) -> str:
+    hours = ms // 3_600_000
+    ms -= hours * 3_600_000
+    minutes = ms // 60_000
+    ms -= minutes * 60_000
+    seconds = ms // 1000
+    millis = ms - seconds * 1000
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
