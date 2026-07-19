@@ -19,10 +19,10 @@ class ONNXDemucsAdapter:
         self.n_fft = 4096
         self.hop_length = 1024
 
-        # Colab T4 16GB 显存，设定每次切块长度为 30 秒
-        self.chunk_size = self.target_sr * 30
+        # ⚠️ 迎合 ONNX 静态计算图：强制要求精确的 343980 采样点 (7.8 秒)
+        self.chunk_size = 343980
         # 设定重叠区域为 2 秒，用于平滑过渡防止爆音
-        self.overlap_size = self.target_sr * 2
+        self.overlap_size = self.target_sr * 1
         self.stride = self.chunk_size - self.overlap_size
 
         print("🚀 [Adapter] 正在加载 htdemucs_ft_vocals_fp16weights.onnx 到 Tensor Cores...")
