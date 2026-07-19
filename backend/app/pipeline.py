@@ -302,8 +302,8 @@ class PipelineRunner:
         vocals_file = media_dir / "audio_vocals.wav"
 
         self.artifacts.vocals_file = onnx_demucs.separate_vocals(
-            video_file,
-            vocals_file
+            str(video_file),
+            str(vocals_file)
         )
         self.stage_message("separate", f"Vocals: {self.artifacts.vocals_file.name}")
 
