@@ -56,23 +56,32 @@ class ONNXDemucsAdapter:
 
     def _infer_chunk(self, chunk: torch.Tensor) -> torch.Tensor:
         """
-        陷阱 3 终结者：外部 STFT 与引擎推理
+        修正版：直接喂入波形，将 STFT 计算完全交给 ONNX 内部处理
         """
-        # 1. 外部 STFT: 波形 -> 频域
-        spec = torch.stft(
-            chunk, n_fft=self.n_fft, hop_length=self.hop_length, return_complex=False
-        )
-        spec_np = spec.unsqueeze(0).numpy()
+        # 1. chunk 原本是 [2, length] 的 2 维张量。
+        # 我们使用 unsqueeze(0) 为其增加一个 Batch 维度，变成 [1, 2, length] (正好是模型期望的 Rank 3)
+        chunk_np = chunk.unsqueeze(0).numpy().astype(np.float32)
 
         # 2. 喂给 ONNX Runtime
-        ort_inputs = {self.ort_session.get_inputs()[0].name: spec_np}
+        ort_inputs = {self.ort_session.get_inputs()[0].name: chunk_np}
         ort_outs = self.ort_session.run(None, ort_inputs)
 
-        # 3. 外部 iSTFT: 提取出的人声频域 -> 波形
-        vocals_spec = torch.from_numpy(ort_outs[0]).squeeze(0)
-        vocals_waveform = torch.istft(
-            vocals_spec, n_fft=self.n_fft, hop_length=self.hop_length, length=chunk.shape[-1]
-        )
+        # 3. 解析模型输出
+        out_tensor = torch.from_numpy(ort_outs[0])
+
+        # ONNX 的输出可能有两种情况：
+        # 模式 A: [1, 2, length] (只输出人声)
+        # 模式 B: [1, 1, 2, length] (标准 Demucs 结构: [batch, sources, channels, length])
+        if out_tensor.dim() == 4:
+            # 如果是 4 维，剥离 batch 和 source 维度
+            vocals_waveform = out_tensor[0, 0, :, :]
+        elif out_tensor.dim() == 3:
+            # 如果是 3 维，剥离 batch 维度
+            vocals_waveform = out_tensor[0, :, :]
+        else:
+            # 暴力降维作为最后防线
+            vocals_waveform = out_tensor.squeeze()
+
         return vocals_waveform
 
     def separate_vocals(self, input_path: str, output_path: str) -> Path:
