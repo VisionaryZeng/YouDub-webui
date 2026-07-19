@@ -55,78 +55,72 @@ class ONNXDemucsAdapter:
         return waveform
 
     def _infer_chunk(self, chunk: torch.Tensor) -> torch.Tensor:
-        """
-        修正版：直接喂入波形，将 STFT 计算完全交给 ONNX 内部处理
-        """
-        # 1. chunk 原本是 [2, length] 的 2 维张量。
-        # 我们使用 unsqueeze(0) 为其增加一个 Batch 维度，变成 [1, 2, length] (正好是模型期望的 Rank 3)
+        # 1. 补充 Batch 维度 [1, 2, 343980]
         chunk_np = chunk.unsqueeze(0).numpy().astype(np.float32)
 
         # 2. 喂给 ONNX Runtime
         ort_inputs = {self.ort_session.get_inputs()[0].name: chunk_np}
         ort_outs = self.ort_session.run(None, ort_inputs)
 
-        # 3. 解析模型输出
         out_tensor = torch.from_numpy(ort_outs[0])
 
-        # ONNX 的输出可能有两种情况：
-        # 模式 A: [1, 2, length] (只输出人声)
-        # 模式 B: [1, 1, 2, length] (标准 Demucs 结构: [batch, sources, channels, length])
+        # 3. 解析模型输出 (修复：精准定位人声轨)
         if out_tensor.dim() == 4:
-            # 如果是 4 维，剥离 batch 和 source 维度
-            vocals_waveform = out_tensor[0, 0, :, :]
+            # 标准 Demucs 输出 4 轨: [batch, sources, channels, length]
+            # 索引规则: 0=鼓, 1=贝斯, 2=其他, 3=人声
+            # 动态判断: 也有特殊微调版只输出 2 轨 (0=伴奏, 1=人声)
+            vocals_idx = 3 if out_tensor.shape[1] == 4 else (out_tensor.shape[1] - 1)
+            vocals_waveform = out_tensor[0, vocals_idx, :, :]
         elif out_tensor.dim() == 3:
-            # 如果是 3 维，剥离 batch 维度
             vocals_waveform = out_tensor[0, :, :]
         else:
-            # 暴力降维作为最后防线
             vocals_waveform = out_tensor.squeeze()
 
         return vocals_waveform
 
     def separate_vocals(self, input_path: str, output_path: str) -> Path:
-        """
-        陷阱 4 终结者：核心调度接口，处理长音频并消除切块爆音 (Overlap-Add)
-        """
         waveform = self._preprocess_audio(input_path)
         total_length = waveform.shape[1]
 
-        # 预分配全长的输出张量（填满 0）和权重记录器
         final_vocals = torch.zeros_like(waveform)
         weight_sum = torch.zeros(total_length)
 
-        # 生成 Hanning 窗，用于切块边缘的淡入淡出（防爆音黑科技）
-        window = torch.hann_window(self.chunk_size)
+        # 【核心修复】：构建梯形平顶窗 (Trapezoidal Window)
+        # 前 overlap_size: 线性淡入 (0 -> 1)
+        # 中间区域: 保持满音量 1.0 (保证声音平稳不颤抖)
+        # 后 overlap_size: 线性淡出 (1 -> 0)
+        window = torch.ones(self.chunk_size)
+        window[:self.overlap_size] = torch.linspace(0, 1, self.overlap_size)
+        window[-self.overlap_size:] = torch.linspace(1, 0, self.overlap_size)
 
         print(f"🎵 [Adapter] 开始分离人声，总长: {total_length / self.target_sr:.2f} 秒...")
 
-        # 滑动窗口切块处理
         for i in range(0, total_length, self.stride):
             end_idx = min(i + self.chunk_size, total_length)
             chunk = waveform[:, i:end_idx]
             current_chunk_length = chunk.shape[1]
 
-            # 如果到了最后一小块，且长度不足以支撑模型运算，进行补零 Padding
+            # 尾部补零
             if current_chunk_length < self.chunk_size:
                 pad_size = self.chunk_size - current_chunk_length
                 chunk = torch.nn.functional.pad(chunk, (0, pad_size))
 
-            # 执行 GPU 推理
+            # 推理获取人声
             vocal_chunk = self._infer_chunk(chunk)
 
-            # 截取有效部分（去掉可能 padding 的部分），并应用 Hanning 窗平滑边缘
+            # 截取有效部分，应用梯形窗
             vocal_chunk = vocal_chunk[:, :current_chunk_length]
             current_window = window[:current_chunk_length].to(vocal_chunk.device)
 
-            # Overlap-Add 重叠追加
+            # 累加音频和权重
             final_vocals[:, i:end_idx] += vocal_chunk * current_window
             weight_sum[i:end_idx] += current_window
 
-        # 归一化重叠部分，防止重叠处声音过大
+        # 防止边缘除以 0 导致杂音，进行归一化
         weight_sum = torch.clamp(weight_sum, min=1e-8)
         final_vocals = final_vocals / weight_sum
 
-        # 落盘保存为 Whisper 需要的无损 WAV 格式
+        # 落盘
         torchaudio.save(output_path, final_vocals, self.target_sr, format="wav")
         print(f"✅ [Adapter] 人声提取完成: {output_path}")
 
