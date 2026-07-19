@@ -231,7 +231,7 @@ class PipelineRunner:
             return
         if stage == "separate":
             self.artifacts.vocals_file = _require_existing(session / "media" / "audio_vocals.wav", "vocals_file")
-            self.artifacts.bgm_file = _require_existing(session / "media" / "audio_bgm.wav", "bgm_file")
+            # self.artifacts.bgm_file = _require_existing(session / "media" / "audio_bgm.wav", "bgm_file")
             return
         if stage == "asr":
             self.artifacts.asr_file = _require_existing(session / "metadata" / "asr.json", "asr_file")
