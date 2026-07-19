@@ -7,6 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from google.auth import default
+import google.auth.transport.requests
 import instructor
 from openai import OpenAI
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -82,7 +84,17 @@ def _client(base_url: str, api_key: str) -> OpenAI:
     if not api_key:
         raise ValueError("OpenAI API key is not configured.")
 
-    client = OpenAI(api_key=api_key, base_url=normalize_openai_base_url(base_url),max_retries = 2)
+    # client = OpenAI(api_key=api_key, base_url=normalize_openai_base_url(base_url),max_retries = 2)
+
+    # 1. 动态获取 Google Cloud 认证 Token
+    credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    credentials.refresh(google.auth.transport.requests.Request())
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://us-central1-aiplatform.googleapis.com/v1beta1/projects/project-4e4de0ce-a156-416f-bad/locations/us-central1/endpoints/openapi",
+        max_retries=2
+    )
     return instructor.patch(client)
 
 

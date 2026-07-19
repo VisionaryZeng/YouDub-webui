@@ -3,6 +3,7 @@ uvicorn[standard]
 python-dotenv
 pydantic
 python-multipart
+google-auth
 openai
 instructor
 yt-dlp[default]
