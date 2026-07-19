@@ -60,7 +60,8 @@ class PipelineRunner:
         self._progress_state: dict[str, tuple[int, float]] = {}
         self._stage_handlers: dict[str, Callable[[dict], None]] = {
             "download": self._download,
-            "separate": self._separate,
+            # "separate": self._separate,
+            "separate": self._separate_onnx,
             "asr": self._asr,
             "asr_fix": self._asr_fix,
             "translate": self._translate,
@@ -288,6 +289,23 @@ class PipelineRunner:
             progress_callback=lambda progress, message: self.stage_progress("separate", progress, message),
         )
         self.stage_message("separate", f"Vocals: {self.artifacts.vocals_file.name}, BGM: {self.artifacts.bgm_file.name}")
+
+    def _separate_onnx(self, _: dict) -> None:
+        from .adapters.onnx_demucs import ONNXDemucsAdapter
+
+        onnx_demucs = ONNXDemucsAdapter("data/modelscope")
+
+        session = _require(self.artifacts.session, "session")
+        video_file = _require(self.artifacts.video_file, "video_file")
+
+        media_dir = session / "media"
+        vocals_file = media_dir / "audio_vocals.wav"
+
+        self.artifacts.vocals_file = onnx_demucs.separate_vocals(
+            video_file,
+            vocals_file
+        )
+        self.stage_message("separate", f"Vocals: {self.artifacts.vocals_file.name}")
 
     def _asr(self, task: dict) -> None:
         import json as _json

@@ -3,5 +3,6 @@
 # Install this before requirements.txt. For CPU or macOS inference, skip this file.
 # Use https://pytorch.org/get-started/locally/ if your driver needs a different build.
 --index-url https://download.pytorch.org/whl/cu128
-torch
-torchaudio
+# torch
+# torchaudio
+onnxruntime-gpu
