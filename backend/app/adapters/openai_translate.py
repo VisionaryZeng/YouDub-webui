@@ -91,7 +91,7 @@ def _client(base_url: str, api_key: str) -> OpenAI:
     credentials.refresh(google.auth.transport.requests.Request())
 
     client = OpenAI(
-        api_key=api_key,
+        api_key=credentials.token,
         base_url="https://us-central1-aiplatform.googleapis.com/v1beta1/projects/project-4e4de0ce-a156-416f-bad/locations/us-central1/endpoints/openapi",
         max_retries=2
     )
