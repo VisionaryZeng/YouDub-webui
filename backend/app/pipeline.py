@@ -293,7 +293,7 @@ class PipelineRunner:
     def _separate_onnx(self, _: dict) -> None:
         from .adapters.onnx_demucs import ONNXDemucsAdapter
 
-        onnx_demucs = ONNXDemucsAdapter("data/modelscope")
+        onnx_demucs = ONNXDemucsAdapter("./data/modelscope/demucs/htdemucs_ft_vocals_fp16weights.onnx")
 
         session = _require(self.artifacts.session, "session")
         video_file = _require(self.artifacts.video_file, "video_file")
