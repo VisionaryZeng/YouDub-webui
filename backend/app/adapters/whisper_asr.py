@@ -92,7 +92,7 @@ def _convert_segments(segments: list) -> list:
             cur_words.append(word)
 
             # 满足超出 10 个字符时作为一行字幕，类似坐电梯，没超重就进电梯，超重了就等下一次电梯
-            if word.get("word", "").rstrip().endswith((",",".","?",";")) and len(cur_words) >= 10:
+            if word.get("word", "").rstrip().endswith((",",".","?",";")) and len(cur_words) > 10:
                 # 1 标点符号： 逗号、分号、冒号是最高优先级的切分点。
                 symbol_idx = rfind_delimiter((".","?",",",";"), cur_words[:-1])
                 if symbol_idx != -1:
@@ -127,10 +127,13 @@ def _convert_segments(segments: list) -> list:
     return full_line
 
 def rfind_delimiter(delimiter: tuple, words: list[dict]) -> int:
+    print(f"分隔符： {delimiter}")
     for idx in range(len(words) - 1, -1, -1):
-        word = words[idx]
+        word = words[idx].get("word", "")
+        print(f"当前拿到的是: {word}")
         # 找到在 10 个 word 里面的分隔符，避免太长
-        if word.get("word", "").rstrip().endswith(delimiter) and idx <= 9:
+        if word.rstrip().endswith(delimiter) and idx <= 9:
+            print(f"在{words}识别到index为{idx}的word是: {word}")
             return idx
 
     return -1
