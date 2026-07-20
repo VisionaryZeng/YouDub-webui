@@ -129,7 +129,7 @@ def _convert_segments(segments: list) -> list:
 def rfind_delimiter(delimiter: tuple, words: list[dict]) -> int:
     for idx in range(len(words) - 1, -1, -1):
         word = words[idx]
-        # 找到在 10 个 word 里面的分隔符
+        # 找到在 10 个 word 里面的分隔符，避免太长
         if word.get("word", "").rstrip().endswith(delimiter) and idx <= 9:
             return idx
 
