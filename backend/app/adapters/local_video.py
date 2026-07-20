@@ -210,7 +210,11 @@ def import_local_path(url: str, workfolder: Path, source: SourceConfig) -> tuple
     media_dir.mkdir(parents=True, exist_ok=True)
     metadata_dir.mkdir(parents=True, exist_ok=True)
 
-    video_file = media_dir / "video_source.mp4"
+    # 默认视频 为 mp4 格式
+    media_file = media_dir / "video_source.mp4"
+
+    if source_file.suffix == ".wav":
+        media_file = media_dir / "video_source.wav"
     meta = {
         "id": task_id,
         "title": title,
@@ -225,10 +229,17 @@ def import_local_path(url: str, workfolder: Path, source: SourceConfig) -> tuple
     metadata_file = metadata_dir / "local_info.json"
     metadata_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    if video_file.exists() and video_file.stat().st_size > 0:
+    if media_file.exists() and media_file.stat().st_size > 0:
         return session, meta
 
-    _transcode_to_mp4(source_file, video_file)
-    if not video_file.exists() or video_file.stat().st_size == 0:
+    if media_file.exists() and media_file.stat().st_size > 0:
+        return session, info
+    if source_file.suffix == ".mp4":
+        _transcode_to_mp4(source_file, media_file)
+
+    if source_file.suffix == ".wav":
+        shutil.copy2(source_file, media_file)
+
+    if not media_file.exists() or media_file.stat().st_size == 0:
         raise RuntimeError("ffmpeg finished without producing media/video_source.mp4")
     return session, meta
