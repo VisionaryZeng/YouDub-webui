@@ -81,8 +81,8 @@ def list_models(*, base_url: str, api_key: str) -> list[str]:
 
 
 def _client(base_url: str, api_key: str) -> OpenAI:
-    if not api_key:
-        raise ValueError("OpenAI API key is not configured.")
+    # if not api_key:
+    #    raise ValueError("OpenAI API key is not configured.")
 
     # client = OpenAI(api_key=api_key, base_url=normalize_openai_base_url(base_url),max_retries = 2)
 
