@@ -85,7 +85,7 @@ def _convert_segments(segments: list) -> list:
         for word in seg.get("words", []):
             # 0 间隔超出 1s，要拆分
             cur_words : list = line.get("words")
-            if len(cur_words) > 1 and word.get("start_time") - cur_words[-1].get("end_time") >= 1000:
+            if len(cur_words) > 1 and word.get("start") - cur_words[-1].get("end") >= 1.0:
                 line = finish_line(line, full_line)
                 cur_words = line.get("words")
 
