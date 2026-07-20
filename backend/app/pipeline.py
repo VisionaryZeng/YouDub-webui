@@ -227,7 +227,9 @@ class PipelineRunner:
         self.artifacts.session = session
 
         if stage == "download":
-            self.artifacts.video_file = _require_existing(session / "media" / "video_source.mp4", "video_file")
+            # 音频不存在的话，才校验视频
+            if not (session / "media" / "audio_vocals.wav").exists():
+                self.artifacts.video_file = _require_existing(session / "media" / "video_source.mp4", "video_file")
             return
         if stage == "separate":
             self.artifacts.vocals_file = _require_existing(session / "media" / "audio_vocals.wav", "vocals_file")
