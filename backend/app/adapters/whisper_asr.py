@@ -74,41 +74,83 @@ def _convert_words(words: list) -> list:
 
 
 def _convert_segments(segments: list) -> list:
-    pre_line = {
+    line = {
         "text": "",
         "start_time": 0,
         "end_time": 0,
         "words": [],
     }
-    full_line = [pre_line]
-    cur_line = []
+    full_line = [line]
     for seg in segments:
         for word in seg.get("words", []):
-            cur_line.append(word)
-            if word.get("word", "").rstrip().endswith((",",".")):
-                # 满足超出 16 个字符时作为一行字幕，类似坐电梯，没超重就进电梯，超重了就等下一次电梯
-                if len(pre_line["words"]) + len(cur_line) > 16:
-                    concat_line(pre_line)
-                    pre_line = {
-                        "text": "",
-                        "start_time": 0,
-                        "end_time": 0,
-                        "words": cur_line,
-                    }
-                    full_line.append(pre_line)
-                else:
-                    pre_line["words"].extend(cur_line)
-                cur_line = []
+            # 0 间隔超出 1s，要拆分
+            cur_words : list = line.get("words")
+            if len(cur_words) > 1 and word.get("start_time") - cur_words[-1].get("end_time") >= 1000:
+                line = finish_line(line, full_line)
+                cur_words = line.get("words")
 
-    concat_line(pre_line)
+            cur_words.append(word)
+
+            # 满足超出 10 个字符时作为一行字幕，类似坐电梯，没超重就进电梯，超重了就等下一次电梯
+            if word.get("word", "").rstrip().endswith((",",".","?",";")) and len(cur_words) >= 10:
+                # 1 标点符号： 逗号、分号、冒号是最高优先级的切分点。
+                symbol_idx = rfind_delimiter((".","?",",",";"), cur_words[:-1])
+                if symbol_idx != -1:
+                    line["words"]= cur_words[: symbol_idx+1]
+                    line = finish_line(line, full_line)
+                    line["words"] = cur_words[symbol_idx + 1 :]
+                    continue
+
+                # 2 并列连词： 在 and, but, or, so 之前切分。（注意：连词应该留在下一行的开头，而不是上一行的结尾。比如：...went to the store, / but it was closed.）
+                word_idx = rfind_delimiter(("and", "but", "or", "so", "however"), cur_words)
+                if word_idx != -1:
+                    line["words"] = cur_words[: word_idx - 1]
+                    line = finish_line(line, full_line)
+                    line["words"] = cur_words[word_idx:]
+                    continue
+
+                # 3 从属连词： 在 because, if, although, when 之前切分。
+                word_idx = rfind_delimiter(("because", "if", "although", "when"), cur_words)
+                if word_idx != -1:
+                    line["words"] = cur_words[: word_idx - 1]
+                    line = finish_line(line, full_line)
+                    line["words"] = cur_words[word_idx:]
+                    continue
+                # 4 关系代词： 在定语从句的引导词 which, who, that 之前切分。
+                word_idx = rfind_delimiter(("which", "who", "that"), cur_words)
+                if word_idx != -1:
+                    line["words"] = cur_words[: word_idx - 1]
+                    line = finish_line(line, full_line)
+                    line["words"] = cur_words[word_idx:]
+
+    concat_words(line)
     return full_line
 
+def rfind_delimiter(delimiter: tuple, words: list[dict]) -> int:
+    for idx, word in enumerate(words):
+        if word.get("word", "").endswith(delimiter):
+            return idx
 
-def concat_line(pre_line: dict):
-    pre_line["text"] = "".join(word.get("word", "") for word in pre_line["words"]).strip()
-    pre_line["words"] = _convert_words(pre_line["words"])
-    pre_line["start_time"] = pre_line["words"][0].get("start_time", 0.0)
-    pre_line["end_time"] = pre_line["words"][-1].get("end_time", 0.0)
+    return -1
+
+
+def finish_line(line: dict[str, str], full_line: list) -> dict:
+    concat_words(line)
+    line = {
+        "text": "",
+        "start_time": 0,
+        "end_time": 0,
+        "words": [],
+    }
+    full_line.append(line)
+    return line
+
+
+def concat_words(line: dict):
+    line["text"] = "".join(word.get("word", "") for word in line["words"]).strip()
+    line["words"] = _convert_words(line["words"])
+    line["start_time"] = line["words"][0].get("start_time", 0.0)
+    line["end_time"] = line["words"][-1].get("end_time", 0.0)
 
 
 def recognize_speech(vocals_file: Path, session: Path, language: str) -> Path:
