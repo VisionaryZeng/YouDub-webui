@@ -291,16 +291,18 @@ class PipelineRunner:
         self.stage_message("separate", f"Vocals: {self.artifacts.vocals_file.name}, BGM: {self.artifacts.bgm_file.name}")
 
     def _separate_onnx(self, _: dict) -> None:
-        from .adapters.onnx_demucs import ONNXDemucsAdapter
-
-        onnx_demucs = ONNXDemucsAdapter("./data/modelscope/demucs/htdemucs_ft_vocals_fp16weights.onnx")
-
         session = _require(self.artifacts.session, "session")
-        video_file = _require(self.artifacts.video_file, "video_file")
-
         media_dir = session / "media"
         vocals_file = media_dir / "audio_vocals.wav"
 
+        if vocals_file.exists():
+            self.stage_message("separate", f"Vocals: {self.artifacts.vocals_file.name}")
+            return vocals_file
+
+        from .adapters.onnx_demucs import ONNXDemucsAdapter
+        onnx_demucs = ONNXDemucsAdapter("./data/modelscope/demucs/htdemucs_ft_vocals_fp16weights.onnx")
+
+        video_file = _require(self.artifacts.video_file, "video_file")
         self.artifacts.vocals_file = onnx_demucs.separate_vocals(
             str(video_file),
             str(vocals_file)

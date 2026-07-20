@@ -214,7 +214,7 @@ def import_local_path(url: str, workfolder: Path, source: SourceConfig) -> tuple
     media_file = media_dir / "video_source.mp4"
 
     if source_file.suffix == ".wav":
-        media_file = media_dir / "video_source.wav"
+        media_file = media_dir / "audio_vocals.wav"
     meta = {
         "id": task_id,
         "title": title,
