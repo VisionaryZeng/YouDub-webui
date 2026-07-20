@@ -13,6 +13,7 @@ julius>=0.2.3
 lameenc>=1.2
 openunmix
 openai-whisper
+stable-ts
 spacy
 voxcpm
 soundfile

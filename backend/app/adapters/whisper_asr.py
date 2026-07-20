@@ -41,19 +41,20 @@ def _load_model():
     if _MODEL is not None:
         return _MODEL
 
+    import stable_whisper
     import whisper
 
     name = os.getenv("WHISPER_MODEL", "large-v3-turbo")
     whisper_device = resolve_device("whisper").selected
     download_root = os.getenv("WHISPER_DOWNLOAD_ROOT") or None
     try:
-        _MODEL = whisper.load_model(name, device=whisper_device, download_root=download_root)
+        _MODEL = stable_whisper.load_model(name, device=whisper_device, download_root=download_root)
     except RuntimeError as exc:
         if not _is_checksum_error(exc):
             raise
         if not _remove_corrupt_whisper_cache(whisper, name, download_root):
             raise
-        _MODEL = whisper.load_model(name, device=whisper_device, download_root=download_root)
+        _MODEL = stable_whisper.load_model(name, device=whisper_device, download_root=download_root)
 
     return _MODEL
 
@@ -72,6 +73,20 @@ def _convert_words(words: list) -> list:
         for w in words or []
     ]
 
+
+def _convert_segments_stable(segments: list) -> list:
+    full_line = []
+    for seg in segments:
+        line = {
+            "text": "",
+            "start_time": 0,
+            "end_time": 0,
+            "words": seg.get("words", []),
+        }
+        concat_words(line)
+        full_line.append(line)
+
+    return full_line
 
 def _convert_segments(segments: list) -> list:
     line = {
@@ -127,13 +142,10 @@ def _convert_segments(segments: list) -> list:
     return full_line
 
 def rfind_delimiter(delimiter: tuple, words: list[dict]) -> int:
-    print(f"分隔符： {delimiter}")
     for idx in range(len(words) - 1, -1, -1):
         word = words[idx].get("word", "")
-        print(f"当前拿到的是: {word}")
         # 找到在 10 个 word 里面的分隔符，避免太长
-        if word.rstrip().endswith(delimiter) and idx <= 9:
-            print(f"在{words}识别到index为{idx}的word是: {word}")
+        if word.rstrip().endswith(delimiter) and len(words) - idx <= 10:
             return idx
 
     return -1
@@ -166,14 +178,21 @@ def recognize_speech(vocals_file: Path, session: Path, language: str) -> Path:
         return output_file
 
     model = _load_model()
-    result = model.transcribe(
+    result_obj = model.transcribe(
         str(vocals_file),
         language=language,
         word_timestamps=True,
         verbose=False,
     )
 
-    utterances = _convert_segments(result.get("segments", []))
+    # 2. 核心魔法：在内存中对结果进行重新切分
+    # 这个方法会根据时间戳和语义，智能地把过长的句子拆开，确保每个片段不超过 10 个词
+    result_obj.split_by_length(max_words=10)
+
+    # 3. 将对象转回原版 Whisper 的字典格式，保持与你原有下游代码的兼容性
+    result = result_obj.to_dict()
+
+    utterances = _convert_segments_stable(result.get("segments", []))
     if not utterances:
         raise RuntimeError("Whisper did not return any segments.")
 
