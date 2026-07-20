@@ -298,6 +298,7 @@ class PipelineRunner:
         vocals_file = media_dir / "audio_vocals.wav"
 
         if vocals_file.exists():
+            self.artifacts.vocals_file = vocals_file
             self.stage_message("separate", f"Vocals: {self.artifacts.vocals_file.name}")
             return vocals_file
 
