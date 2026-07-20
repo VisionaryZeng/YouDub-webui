@@ -36,6 +36,10 @@ def separate_audio(
 
     media_dir = session / "media"
     vocals_file = media_dir / "audio_vocals.wav"
+
+    if not vocals_file.exists():
+        vocals_file = media_dir / "audio_vocals.m4a"
+
     bgm_file = media_dir / "audio_bgm.wav"
     if vocals_file.exists() and bgm_file.exists():
         return vocals_file, bgm_file

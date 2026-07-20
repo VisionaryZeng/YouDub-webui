@@ -213,8 +213,8 @@ def import_local_path(url: str, workfolder: Path, source: SourceConfig) -> tuple
     # 默认视频 为 mp4 格式
     media_file = media_dir / "video_source.mp4"
 
-    if source_file.suffix == ".wav":
-        media_file = media_dir / "audio_vocals.wav"
+    if source_file.suffix in {".wav", ".m4a"} :
+        media_file = media_dir / f"audio_vocals{source_file.suffix}"
     meta = {
         "id": task_id,
         "title": title,
@@ -237,7 +237,7 @@ def import_local_path(url: str, workfolder: Path, source: SourceConfig) -> tuple
     if source_file.suffix == ".mp4":
         _transcode_to_mp4(source_file, media_file)
 
-    if source_file.suffix == ".wav":
+    if source_file.suffix in {".wav", ".m4a"} :
         shutil.copy2(source_file, media_file)
 
     if not media_file.exists() or media_file.stat().st_size == 0:

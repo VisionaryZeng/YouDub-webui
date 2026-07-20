@@ -228,11 +228,19 @@ class PipelineRunner:
 
         if stage == "download":
             # 音频不存在的话，才校验视频
-            if not (session / "media" / "audio_vocals.wav").exists():
+            if (not (session / "media" / "audio_vocals.wav").exists()) and (not (session / "media" / "audio_vocals.m4a").exists()):
                 self.artifacts.video_file = _require_existing(session / "media" / "video_source.mp4", "video_file")
             return
         if stage == "separate":
-            self.artifacts.vocals_file = _require_existing(session / "media" / "audio_vocals.wav", "vocals_file")
+            if (session / "media" / "audio_vocals.wav").exists():
+                self.artifacts.vocals_file = session / "media" / "audio_vocals.wav"
+
+            if (session / "media" / "audio_vocals.m4a").exists():
+                self.artifacts.vocals_file = session / "media" / "audio_vocals.m4a"
+
+            if not self.artifacts.vocals_file:
+                raise RuntimeError(f"Missing cached pipeline artifact: vocals_file in ({session / "media"})")
+            # self.artifacts.vocals_file = _require_existing(session / "media" / "audio_vocals.wav", "vocals_file")
             # self.artifacts.bgm_file = _require_existing(session / "media" / "audio_bgm.wav", "bgm_file")
             return
         if stage == "asr":
@@ -296,6 +304,9 @@ class PipelineRunner:
         session = _require(self.artifacts.session, "session")
         media_dir = session / "media"
         vocals_file = media_dir / "audio_vocals.wav"
+
+        if not vocals_file.exists():
+            vocals_file = media_dir / "audio_vocals.m4a"
 
         if vocals_file.exists():
             self.artifacts.vocals_file = vocals_file
