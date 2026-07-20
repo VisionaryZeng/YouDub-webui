@@ -127,8 +127,9 @@ def _convert_segments(segments: list) -> list:
     return full_line
 
 def rfind_delimiter(delimiter: tuple, words: list[dict]) -> int:
-    for idx, word in enumerate(words):
-        if word.get("word", "").endswith(delimiter):
+    for idx in range(len(words), -1, -1):
+        word = words[idx]
+        if word.get("word", "").rstrip().endswith(delimiter):
             return idx
 
     return -1
