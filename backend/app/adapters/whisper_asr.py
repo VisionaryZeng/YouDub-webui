@@ -209,8 +209,8 @@ def merge_short_segments(segments, max_gap_seconds=1.0, max_words=10) -> list:
         else:
             # 条件不满足，把当前已经吸饱的块存入结果库
             merged_chunks.append({
-                "start_time": current_start,
-                "end_time": current_end,
+                "start_time": _to_ms(current_start),
+                "end_time": _to_ms(current_end),
                 "text": current_text,
                 "words": current_words,
             })
@@ -223,8 +223,8 @@ def merge_short_segments(segments, max_gap_seconds=1.0, max_words=10) -> list:
 
     # 循环结束后，别忘了把最后剩下的那个块收尾加进去
     merged_chunks.append({
-        "start_time": current_start,
-        "end_time": current_end,
+        "start_time": _to_ms(current_start),
+        "end_time": _to_ms(current_end),
         "text": current_text,
         "words": current_words,
     })
