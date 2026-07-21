@@ -316,7 +316,7 @@ def translate_asr(
     lines: list[str] = []
 
     for idx, item in enumerate(translation, start=1):
-        lines.extend([str(idx), f"{_srt_time(item["start_time"])} --> {_srt_time(item["end_time"])}", item["src"], item["dst"], ""])
+        lines.extend([str(idx), f"{_srt_time(item["start_time"])} --> {_srt_time(item["end_time"])}", item["dst"], item["src"], ""])
 
     srt_file.write_text("\n".join(lines), encoding="utf-8")
 
