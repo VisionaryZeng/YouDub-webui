@@ -170,6 +170,61 @@ def concat_words(line: dict):
     line["end_time"] = line["words"][-1].get("end_time", 0.0)
 
 
+# 假设 base_segments 是经过 stable-ts 初步转录并转为 dict 后的片段列表
+# 例如你已经跑了: base_segments = result_obj.to_dict()["segments"]
+
+def merge_short_segments(segments, max_gap_seconds=1.0, max_words=10):
+    if not segments:
+        return []
+
+    merged_chunks = []
+
+    # 初始化第一个块
+    current_text = segments[0]["text"].strip()
+    current_start = segments[0]["start"]
+    current_end = segments[0]["end"]
+    # 统计英文单词数（按空格切分）
+    current_word_count = len(current_text.split())
+
+    for next_chunk in segments[1:]:
+        next_text = next_chunk["text"].strip()
+        next_start = next_chunk["start"]
+        next_end = next_chunk["end"]
+        next_word_count = len(next_text.split())
+
+        # 计算两句话之间的静音间隔
+        gap = next_start - current_end
+        # 计算如果拼接在一起的总单词数
+        combined_word_count = current_word_count + next_word_count
+
+        # 核心判断逻辑：间隔不超标 且 字数不超标
+        if gap <= max_gap_seconds and combined_word_count <= max_words:
+            # 允许拼接！吸收下一个片段
+            current_text = current_text + " " + next_text
+            current_end = next_end
+            current_word_count = combined_word_count
+        else:
+            # 条件不满足，把当前已经吸饱的块存入结果库
+            merged_chunks.append({
+                "start": current_start,
+                "end": current_end,
+                "text": current_text
+            })
+            # 开启一个新的收集块
+            current_text = next_text
+            current_start = next_start
+            current_end = next_end
+            current_word_count = next_word_count
+
+    # 循环结束后，别忘了把最后剩下的那个块收尾加进去
+    merged_chunks.append({
+        "start": current_start,
+        "end": current_end,
+        "text": current_text
+    })
+
+    return merged_chunks
+
 def recognize_speech(vocals_file: Path, session: Path, language: str) -> Path:
     metadata_dir = session / "metadata"
     metadata_dir.mkdir(parents=True, exist_ok=True)
@@ -192,7 +247,10 @@ def recognize_speech(vocals_file: Path, session: Path, language: str) -> Path:
     # 3. 将对象转回原版 Whisper 的字典格式，保持与你原有下游代码的兼容性
     result = result_obj.to_dict()
 
-    utterances = _convert_segments_stable(result.get("segments", []))
+    # utterances = _convert_segments_stable(result.get("segments", []))
+
+    utterances = merge_short_segments(segments=result.get("segments", []), max_gap_seconds=1.0, max_words=10)
+
     if not utterances:
         raise RuntimeError("Whisper did not return any segments.")
 
