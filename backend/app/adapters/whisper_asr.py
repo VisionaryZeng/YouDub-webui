@@ -173,7 +173,7 @@ def concat_words(line: dict):
 # 假设 base_segments 是经过 stable-ts 初步转录并转为 dict 后的片段列表
 # 例如你已经跑了: base_segments = result_obj.to_dict()["segments"]
 
-def merge_short_segments(segments, max_gap_seconds=1.0, max_words=10):
+def merge_short_segments(segments, max_gap_seconds=1.0, max_words=10) -> list:
     if not segments:
         return []
 
@@ -181,6 +181,7 @@ def merge_short_segments(segments, max_gap_seconds=1.0, max_words=10):
 
     # 初始化第一个块
     current_text = segments[0]["text"].strip()
+    current_words = segments[0]["words"]
     current_start = segments[0]["start"]
     current_end = segments[0]["end"]
     # 统计英文单词数（按空格切分）
@@ -188,6 +189,7 @@ def merge_short_segments(segments, max_gap_seconds=1.0, max_words=10):
 
     for next_chunk in segments[1:]:
         next_text = next_chunk["text"].strip()
+        next_words = next_chunk["words"]
         next_start = next_chunk["start"]
         next_end = next_chunk["end"]
         next_word_count = len(next_text.split())
@@ -202,16 +204,19 @@ def merge_short_segments(segments, max_gap_seconds=1.0, max_words=10):
             # 允许拼接！吸收下一个片段
             current_text = current_text + " " + next_text
             current_end = next_end
+            current_words.extend(next_words)
             current_word_count = combined_word_count
         else:
             # 条件不满足，把当前已经吸饱的块存入结果库
             merged_chunks.append({
                 "start_time": current_start,
                 "end_time": current_end,
-                "text": current_text
+                "text": current_text,
+                "words": current_words,
             })
             # 开启一个新的收集块
             current_text = next_text
+            current_words = next_words
             current_start = next_start
             current_end = next_end
             current_word_count = next_word_count
@@ -220,7 +225,8 @@ def merge_short_segments(segments, max_gap_seconds=1.0, max_words=10):
     merged_chunks.append({
         "start_time": current_start,
         "end_time": current_end,
-        "text": current_text
+        "text": current_text,
+        "words": current_words,
     })
 
     return merged_chunks
