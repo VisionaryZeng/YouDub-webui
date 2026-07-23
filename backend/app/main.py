@@ -85,6 +85,14 @@ class YtdlpSettingsUpdate(BaseModel):
     proxy_port: str = ""
 
 
+class DirectoryPathTask(BaseModel):
+    directory_path: str
+    direction: str = "en-zh"
+    execution_mode: str = "auto"
+    recursive: bool = False
+    file_extensions: list[str] | None = None
+
+
 def normalize_proxy_port(value: str) -> str:
     proxy_port = value.strip()
     if not proxy_port:
@@ -345,6 +353,88 @@ def create_local_path_task(
     database.update_task(task_id, title=video_file.stem)
     worker.enqueue(task_id)
     return database.get_task(task_id)
+
+
+def _create_single_local_path_task(
+    video_file: Path, direction: str, execution_mode: str
+) -> dict | None:
+    """Helper to create a single task from a local video file."""
+    from urllib.parse import urlencode
+
+    try:
+        params = {"file": str(video_file), "direction": direction}
+        url = f"local://path?{urlencode(params)}"
+
+        task_id = str(uuid.uuid4())
+        database.create_task(
+            url,
+            task_id=task_id,
+            execution_mode=normalize_execution_mode(execution_mode),
+        )
+        database.update_task(task_id, title=video_file.stem)
+        worker.enqueue(task_id)
+        return database.get_task(task_id)
+    except Exception:
+        return None
+
+
+@app.post("/api/tasks/local-path/directory", status_code=201)
+def create_tasks_from_directory(payload: DirectoryPathTask) -> dict:
+    """Create multiple tasks from all video files in a directory."""
+    if payload.direction not in LOCAL_UPLOAD_DIRECTIONS:
+        raise HTTPException(status_code=422, detail="Unsupported direction. Use 'en-zh' or 'zh-en'.")
+
+    _ensure_runtime_ready()
+
+    # Validate directory
+    directory = Path(payload.directory_path).expanduser().resolve()
+    if not directory.exists():
+        raise HTTPException(status_code=404, detail=f"Directory not found: {payload.directory_path}")
+    if not directory.is_dir():
+        raise HTTPException(status_code=400, detail=f"Path is not a directory: {payload.directory_path}")
+
+    # Determine file extensions to scan
+    extensions = set(payload.file_extensions) if payload.file_extensions else ALLOWED_VIDEO_SUFFIXES
+    extensions = {ext.lower() if ext.startswith(".") else f".{ext.lower()}" for ext in extensions}
+
+    # Scan video files
+    pattern = "**/*" if payload.recursive else "*"
+    video_files = [
+        f for f in directory.glob(pattern)
+        if f.is_file() and f.suffix.lower() in extensions
+    ]
+    video_files.sort()  # Sort by filename for consistent ordering
+
+    if not video_files:
+        return {
+            "created_count": 0,
+            "skipped_count": 0,
+            "error_count": 0,
+            "tasks": [],
+            "skipped": [],
+            "errors": [],
+        }
+
+    created_tasks = []
+    errors = []
+
+    for video_file in video_files:
+        task = _create_single_local_path_task(
+            video_file, payload.direction, payload.execution_mode
+        )
+        if task:
+            created_tasks.append(task)
+        else:
+            errors.append({"path": str(video_file), "error": "Failed to create task"})
+
+    return {
+        "created_count": len(created_tasks),
+        "skipped_count": 0,
+        "error_count": len(errors),
+        "tasks": created_tasks,
+        "skipped": [],
+        "errors": errors,
+    }
 
 
 @app.get("/api/tasks/current")
