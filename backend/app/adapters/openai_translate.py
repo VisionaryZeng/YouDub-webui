@@ -312,7 +312,7 @@ def translate_asr(
         encoding="utf-8",
     )
 
-    srt_file = session / "metadata" / f"subtitles.bilingual.srt"
+    srt_file = session / "metadata" / f"{session.name}.bilingual.srt"
     lines: list[str] = []
 
     for idx, item in enumerate(translation, start=1):
