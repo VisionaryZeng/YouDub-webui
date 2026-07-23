@@ -26,7 +26,7 @@ from .stage_reset import remove_stage_artifacts
 from .stages import STAGE_NAMES
 from .youtube import LOCAL_UPLOAD_DIRECTIONS, extract_video_id, is_local_upload_url
 
-ALLOWED_VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".flv", ".wmv"}
+ALLOWED_VIDEO_SUFFIXES = {".m4a", ".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".flv", ".wmv"}
 ALLOWED_SUBTITLE_SUFFIXES = {".srt"}
 LOCAL_UPLOAD_CHUNK_SIZE = 1024 * 1024
 MAX_LOCAL_UPLOAD_BYTES = int(os.getenv("LOCAL_UPLOAD_MAX_BYTES", str(4 * 1024 * 1024 * 1024)))
